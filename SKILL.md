@@ -71,6 +71,15 @@ Each line is a JSON object:
 {"target":"enclosure","title":"RATOC RS-EC32-R5G","properties":{"種別":"USBケース","接続":"USB","ベイ数":2,"普段つないでるPC":"RECRYZEN","購入日":"2026-01-18","購入店":"PCワンズ","価格(円)":8977,"取り外し表示名":"RS-EC32-R5G","メモ":"JAN: 4949090752191"}}
 ```
 
+Optional control fields (for cleanup / manual fixes):
+- `page_id` (or `id`): update this Notion page directly (bypasses upsert matching)
+- `archive: true`: archive the page (useful for de-dup)
+- `overwrite: true`: allow overwriting existing values (including clearing with null)
+
+Optional behavior flags:
+- `mirror_to_pcconfig: true` (only for `target=storage`): also create/update a `pcconfig` row for the installed component.
+  - requires: `現在の接続先PC`, `購入日`, `Name`
+
 Targets: `enclosure | storage | pcconfig | pcinput`
 
 Property value encoding:
