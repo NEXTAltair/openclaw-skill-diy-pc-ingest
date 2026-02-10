@@ -33,10 +33,77 @@ function readJsonFile(p) {
   }
 }
 
-function loadConfig() {
+
+async function bootstrapConfig(outPath) {
+  // Inline bootstrap (same behavior as scripts/bootstrap_config.js) to keep a single entrypoint.
+  const names = {
+    pcconfig: 'PCConfig',
+    pcinput: 'PCInput',
+    storage: 'ストレージ',
+    enclosure: 'エンクロージャー',
+  };
+
+  async function searchDataSources(query) {
+    const j = await notionReq({}, 'POST', '/search', { query, page_size: 50 });
+    const results = j.results || [];
+    return results.filter(r => r && r.object === 'data_source');
+  }
+
+  function plainTitle(obj) {
+    const t = obj?.title || [];
+    return t.map(x => x?.plain_text || '').join('').trim();
+  }
+
+  async function resolveOneByName(wantName) {
+    const hits = await searchDataSources(wantName);
+    const exact = hits.filter(h => plainTitle(h) === wantName);
+    const cand = exact.length ? exact : hits;
+
+    if (cand.length === 0) {
+      die(`Notion data source not found via search: ${wantName}\n- Ensure the database is shared with your integration (Connect to).`);
+    }
+    if (cand.length > 1) {
+      const lines = cand.slice(0, 10).map(h => `- ${plainTitle(h)} (data_source_id=${h.id})`).join('\n');
+      die(`Multiple matches for data source name: ${wantName}\n${lines}\nPlease disambiguate by renaming the DB.`);
+    }
+
+    const ds = cand[0];
+    const dsFull = await notionReq({}, 'GET', `/data_sources/${ds.id}`);
+    const databaseId = dsFull?.database_id;
+    if (!databaseId) die(`Could not resolve database_id for data_source_id=${ds.id}`);
+    return { data_source_id: ds.id, database_id: databaseId, title: plainTitle(ds) };
+  }
+
+  const pcconfig = await resolveOneByName(names.pcconfig);
+  const pcinput = await resolveOneByName(names.pcinput);
+  const storage = await resolveOneByName(names.storage);
+  const enclosure = await resolveOneByName(names.enclosure);
+
+  const config = {
+    notion: {
+      version: process.env.NOTION_VERSION || '2025-09-03',
+      targets: {
+        pcconfig: { data_source_id: pcconfig.data_source_id, database_id: pcconfig.database_id, title_prop: 'Name', key: ['Name', 'Purchase Date'] },
+        pcinput: { data_source_id: pcinput.data_source_id, database_id: pcinput.database_id, title_prop: '名前', key: ['型番', 'Serial', '名前'] },
+        storage: { data_source_id: storage.data_source_id, database_id: storage.database_id, title_prop: 'Name', key: ['シリアル'] },
+        enclosure: { data_source_id: enclosure.data_source_id, database_id: enclosure.database_id, title_prop: 'Name', key: ['取り外し表示名', 'Name'] },
+      },
+    },
+  };
+
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(config, null, 2), 'utf-8');
+  return config;
+}
+async function loadConfig() {
   let p = process.env.DIY_PC_INGEST_CONFIG;
   if (!p) p = path.join(os.homedir(), '.config', 'diy-pc-ingest', 'config.json');
-  if (!fs.existsSync(p)) return {};
+  if (!fs.existsSync(p)) {
+    // Auto-bootstrap: discover Notion IDs via /v1/search when config is missing.
+    // Requires NOTION_API_KEY and that target DBs are shared with the integration.
+    const cfg = await bootstrapConfig(p);
+    return cfg;
+  }
   return readJsonFile(p) || {};
 }
 
@@ -357,7 +424,7 @@ function requireIds(cfg, ids, target) {
 }
 
 async function main() {
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const ids = idsFromConfig(cfg);
 
   const raw = fs.readFileSync(0, 'utf-8');
