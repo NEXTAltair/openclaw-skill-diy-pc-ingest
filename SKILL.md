@@ -47,7 +47,7 @@ Use **data_sources** endpoints for schema/query, and **pages** endpoint for row 
    - **エンクロージャー**: ベイ数 or USB/Thunderbolt/LAN unclear → ask.
    - **PCConfig**: Identifier/型番 missing but needed to match existing row → ask.
 
-5) **Upsert into Notion** using `scripts/notion_apply_records.py`:
+5) **Upsert into Notion** using `scripts/notion_apply_records.js`:
    - Provide JSONL records (one per item) on stdin.
    - Script will:
      - find an existing row by key (see below)
@@ -95,3 +95,8 @@ Property value encoding:
 - Always use Notion-Version `2025-09-03`.
 - Prefer `POST /v1/data_sources/{id}/query` over `/databases/{id}/query`.
 - Relation schema updates require `relation.data_source_id` (not database_id).
+
+
+## Note (implementation)
+- JS implementation is the default: `scripts/notion_apply_records.js`
+- Legacy Python implementation is kept for reference: `scripts/_deprecated/notion_apply_records.py`
